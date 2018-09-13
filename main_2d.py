@@ -3,6 +3,7 @@ from __future__ import print_function, division
 
 import os
 import time
+import random
 import numpy as np
 import theano
 import theano.tensor as T
@@ -49,7 +50,7 @@ def iterate_minibatch(data, batch_size, shuffle=True):
         yield data[i:i+batch_size]
 
 
-def create_dummy_data():
+def create_dummy_data(allocation):
     """
     Creates dummy dataset from one knee subject for demo.
     In practice, one should take much bigger dataset,
@@ -59,12 +60,18 @@ def create_dummy_data():
     """
     data = loadmat(join(project_root, './data/lustig_knee_p2.mat'))['xn']
     nx, ny, nz, nc = data.shape
+    data = np.transpose(data, (3, 0, 1, 2)).reshape((-1, ny, nz))
+    if sum(allocation) > data.shape[0]:
+        raise ValueError('Allocated {} samples but there are only {}'.format(
+                sum(allocation), data.shape[0]))
+    return training_allocation(data, allocation, method='random')
 
-    train = np.transpose(data, (3, 0, 1, 2)).reshape((-1, ny, nz))
-    validate = np.transpose(data, (3, 1, 0, 2)).reshape((-1, nx, nz))
-    test = np.transpose(data, (3, 2, 0, 1)).reshape((-1, nx, ny))
 
-    return train, validate, test
+def training_allocation(data, allocation, method='random'):
+    t, v, s = allocation
+    if method == 'random':
+        np.random.shuffle(data)
+    return data[:t], data[t:t+v], data[t+v:]
 
 
 def compile_fn(network, net_config, args):
@@ -166,9 +173,8 @@ if __name__ == '__main__':
     # Compile function
     train_fn, val_fn = compile_fn(net, net_config, args)
 
-
     # Create dataset
-    train, validate, test = create_dummy_data()
+    train, validate, test = create_dummy_data([160, 40, 56])
 
     print('Start Training...')
     for epoch in xrange(num_epoch):
