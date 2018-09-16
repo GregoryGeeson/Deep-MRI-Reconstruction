@@ -154,6 +154,11 @@ if __name__ == '__main__':
     if not os.path.isdir(save_dir):
         os.makedirs(save_dir)
 
+    # Create dataset
+    n_train, n_validate, n_test = 160, 40, 56
+    train, validate, test = create_dummy_data([n_train, n_validate, n_test])
+    Nx, Ny = train.shape[1], train.shape[2]
+
     # Specify network
     input_shape = (batch_size, 2, Nx, Ny)
     net_config, net,  = build_d2_c2(input_shape)
@@ -166,15 +171,19 @@ if __name__ == '__main__':
     #     lasagne.layers.set_all_param_values(net, param_values)
 
     # Compute acceleration rate
-    dummy_mask = cs.cartesian_mask((10, Nx, Ny), acc, sample_n=8)
+    dummy_mask = cs.cartesian_mask((10, Nx, Ny), acc, sample_n=8, centred=True)
+
+    # BEGIN-MPL
+    for mask in dummy_mask:
+        plt.imshow(mask, cmap='gray')
+        plt.show()
+    # END-MPL
+
     sample_und_factor = cs.undersampling_rate(dummy_mask)
     print('Undersampling Rate: {:.2f}'.format(sample_und_factor))
 
     # Compile function
     train_fn, val_fn = compile_fn(net, net_config, args)
-
-    # Create dataset
-    train, validate, test = create_dummy_data([160, 40, 56])
 
     print('Start Training...')
     for epoch in xrange(num_epoch):
@@ -183,7 +192,10 @@ if __name__ == '__main__':
         train_err = 0
         train_batches = 0
         for im in iterate_minibatch(train, batch_size, shuffle=True):
+            # Get undersampled image, undersampled k-space measurement,
+            # undersampling mask, and ground truth image in Lasagne format
             im_und, k_und, mask, im_gnd = prep_input(im, acc=acc)
+            # Feed forward and compute error
             err = train_fn(im_und, mask, k_und, im_gnd)[0]
             train_err += err
             train_batches += 1
