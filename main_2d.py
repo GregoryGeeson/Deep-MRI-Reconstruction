@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import print_function, division
 
+import sys
 import os
 import time
 import random
@@ -140,11 +141,11 @@ if __name__ == '__main__':
 
     # Project config
     model_name = 'd2_c2'
-    #gauss_ivar = float(args.gauss_ivar[0])  # undersampling rate
+    # gauss_ivar = float(args.gauss_ivar[0])  # undersampling rate
     acc = float(args.acceleration_factor[0])  # undersampling rate
     num_epoch = int(args.num_epoch[0])
     batch_size = int(args.batch_size[0])
-    Nx, Ny = 128, 128
+    Nx, Ny = 128, 128  # TODO set appropriate
     save_fig = args.savefig
     save_every = 5
 
@@ -157,30 +158,18 @@ if __name__ == '__main__':
     # Create dataset
     n_train, n_validate, n_test = 160, 40, 56
     train, validate, test = create_dummy_data([n_train, n_validate, n_test])
-    Nx, Ny = train.shape[1], train.shape[2]
 
     # Specify network
     input_shape = (batch_size, 2, Nx, Ny)
-    net_config, net,  = build_d2_c2(input_shape)
+    # net_config, net,  = build_d2_c2(input_shape)
+    net_config, net,  = build_d5_c5(input_shape)
 
-    # # Load D5-C5 with pretrained params
-    # net_config, net,  = build_d5_c5(input_shape)
     # D5-C5 with pre-trained parameters
     # with np.load('./models/pretrained/d5_c5.npz') as f:
     #     param_values = [f['arr_{0}'.format(i)] for i in range(len(f.files))]
     #     lasagne.layers.set_all_param_values(net, param_values)
 
-    # Compute acceleration rate
-    dummy_mask = cs.cartesian_mask((10, Nx, Ny), acc, sample_n=8, centred=True)
-
-    # BEGIN-MPL
-    for mask in dummy_mask:
-        plt.imshow(mask, cmap='gray')
-        plt.show()
-    # END-MPL
-
-    sample_und_factor = cs.undersampling_rate(dummy_mask)
-    print('Undersampling Rate: {:.2f}'.format(sample_und_factor))
+    print('Undersampling Rate: {:.2f}'.format(1 / acc))
 
     # Compile function
     train_fn, val_fn = compile_fn(net, net_config, args)
@@ -188,6 +177,7 @@ if __name__ == '__main__':
     print('Start Training...')
     for epoch in xrange(num_epoch):
         t_start = time.time()
+
         # Training
         train_err = 0
         train_batches = 0
@@ -203,6 +193,7 @@ if __name__ == '__main__':
             if args.debug and train_batches == 20:
                 break
 
+        # Validation
         validate_err = 0
         validate_batches = 0
         for im in iterate_minibatch(validate, batch_size, shuffle=False):
@@ -214,6 +205,7 @@ if __name__ == '__main__':
             if args.debug and validate_batches == 20:
                 break
 
+        # Testing
         vis = []
         test_err = 0
         base_psnr = 0
@@ -221,7 +213,6 @@ if __name__ == '__main__':
         test_batches = 0
         for im in iterate_minibatch(test, batch_size, shuffle=False):
             im_und, k_und, mask, im_gnd = prep_input(im, acc=acc)
-
             err, pred = val_fn(im_und, mask, k_und, im_gnd)
             test_err += err
             for im_i, und_i, pred_i in zip(im,
@@ -263,8 +254,8 @@ if __name__ == '__main__':
                 i = 0
                 for im_i, pred_i, und_i, mask_i in vis:
                     plt.imsave(join(save_dir, 'im{0}.png'.format(i)),
-                               abs(np.concatenate([und_i, pred_i,
-                                                   im_i, im_i - pred_i], 1)),
+                               np.abs(np.concatenate(
+                                   [und_i, pred_i, im_i, im_i - pred_i], 1)),
                                cmap='gray')
                     plt.imsave(join(save_dir, 'mask{0}.png'.format(i)), mask_i,
                                cmap='gray')
